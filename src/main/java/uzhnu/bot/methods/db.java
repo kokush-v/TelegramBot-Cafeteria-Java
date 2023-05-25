@@ -1,4 +1,4 @@
-package uzhnu.bot.database.methods;
+package uzhnu.bot.methods;
 
 import java.io.FileReader;
 import java.io.FileWriter;

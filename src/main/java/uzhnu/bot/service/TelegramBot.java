@@ -7,7 +7,6 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.apache.commons.logging.Log;
 import org.apache.log4j.Logger;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.commands.SetMyCommands;
@@ -25,7 +24,7 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.Keyboard
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import uzhnu.bot.configuration.BotConfig;
-import uzhnu.bot.database.methods.db;
+import uzhnu.bot.methods.db;
 import uzhnu.bot.myclasses.Order;
 import uzhnu.bot.myclasses.ReplyButton;
 import uzhnu.bot.myclasses.ShopMenu;
@@ -46,7 +45,7 @@ public class TelegramBot extends TelegramLongPollingBot {
 
     List<BotCommand> listOfCommands = new ArrayList<>();
     listOfCommands.add(new BotCommand("/start", "Перейти на початок"));
-    listOfCommands.add(new BotCommand("/shops", "Відкриває список зареєстрованних кафе"));
+    listOfCommands.add(new BotCommand("/menu", "Відкриває меню кафетерію"));
     listOfCommands.add(new BotCommand("/profile", "Профіль користувача"));
     listOfCommands.add(new BotCommand("/register", "Зареєструйтесь щоб користуватись ботом"));
 
@@ -69,10 +68,6 @@ public class TelegramBot extends TelegramLongPollingBot {
       addHistoryMessage(messageUpdate);
 
       if (messageUpdate.getChatId().compareTo(botChannel) == 0) {
-        var text = messageUpdate.getText().split("@")[0].substring(1);
-
-        messageUpdate.setText(text);
-
         db.addMessagesToDbBotChannel(messageUpdate);
       }
 
@@ -116,6 +111,18 @@ public class TelegramBot extends TelegramLongPollingBot {
           case "/profile" -> {
             showProfile(chatId, update, 0, userId);
           }
+          case "/menu" -> {
+            if (db.getUsersFromDb(userId) != null)
+              showMenu(chatId, userId);
+            else {
+              var m = sendMessage(chatId, "❗", null);
+
+              ArrayList<ReplyButton> replyButtons = new ArrayList<ReplyButton>(
+                  Arrays.asList(new ReplyButton("Реєстрація", "REG")));
+
+              setReplyButtonsOnMessage(replyButtons, chatId, m.getMessageId(), "❗Будь ласка пройдіть реєстрацію❗");
+            }
+          }
         }
       } catch (Exception e) {
         log.error(e.getMessage());
@@ -152,7 +159,8 @@ public class TelegramBot extends TelegramLongPollingBot {
         case "SAVE_DATA" -> {
           switch (userSession.getRegisterStep()) {
             case 1 -> {
-              if (inputValidation(chatId, update, updMessage, lastTextHistoryMessage)) {
+              if (inputValidation(chatId, update, updMessage, lastTextHistoryMessage)
+                  && !lastTextHistoryMessage.getFrom().getIsBot()) {
 
                 user.setUserName(lastTextHistoryMessage.getText());
 
@@ -161,7 +169,8 @@ public class TelegramBot extends TelegramLongPollingBot {
                     List.of(
                         new ReplyButton("Зберегти", "SAVE_DATA")));
 
-                setReplyButtonsOnMessage(replyButtons, chatId, messageId, "Введіть номер телефону 📱");
+                setReplyButtonsOnMessage(replyButtons, chatId, messageId,
+                    "Введіть номер телефону 📱\nПриклад: +380xx-xxx-xx-xx");
 
                 userSession.setRegisterStep(2);
                 db.editUserSessionFromDb(userSession);
@@ -169,7 +178,8 @@ public class TelegramBot extends TelegramLongPollingBot {
             }
             case 2 -> {
 
-              if (isValidPhoneNumber(lastTextHistoryMessage.getText(), chatId, update)) {
+              if (isValidPhoneNumber(lastTextHistoryMessage.getText(), chatId, update)
+                  && !lastTextHistoryMessage.getFrom().getIsBot()) {
 
                 user.setUserPhone(lastTextHistoryMessage.getText());
 
@@ -200,7 +210,7 @@ public class TelegramBot extends TelegramLongPollingBot {
                         new ReplyButton("Профіль", "PROFILE")));
 
                 setReplyButtonsOnMessage(replyButtons, chatId, messageId,
-                    "Ви були зареєстровані. Дякую за реєстраці. 👌😊");
+                    "Ви були зареєстровані. Дякую за реєстрацію 👌😊");
 
                 db.addUserToDb(user);
 
@@ -424,7 +434,6 @@ public class TelegramBot extends TelegramLongPollingBot {
 
         case "CANCEL_ORDER" -> {
           delteMessageById(chatId, messageId);
-
           long orderId = Long.parseLong(updMessage.getText().split("\n")[0].split(" ")[1]);
           Message m = db.getOrderById(orderId).get(0);
           DeleteMessage d = new DeleteMessage();
@@ -529,7 +538,7 @@ public class TelegramBot extends TelegramLongPollingBot {
     ArrayList<ReplyButton> replyButtons = new ArrayList<ReplyButton>(
         List.of(
             new ReplyButton("Змінити профіль", "EDIT_PROFILE"),
-            new ReplyButton("Обновити меню заказів", "UPDATE_PROF_MENU"),
+            new ReplyButton("Оновити меню замовлень", "UPDATE_PROF_MENU"),
             new ReplyButton("Подивитись меню", "MENU")));
 
     setReplyButtonsOnMessage(replyButtons, chatId, profMessage.getMessageId(), profileData);
@@ -555,7 +564,7 @@ public class TelegramBot extends TelegramLongPollingBot {
         str.append(String.format("\n№ %s\n\n", o.getOrderId()));
 
         for (ShopMenu i : o.getOrderItems()) {
-          var text = String.format("%s:    %s шт.\n%s грн\n\nСтатус: %s",
+          var text = String.format("%s:    %s шт.\n%s грн\n\n",
               i.getItem().getItemName(),
               String.valueOf(i.getAmount()),
               String.valueOf(i.getItem().getItemPrice()),
@@ -564,8 +573,10 @@ public class TelegramBot extends TelegramLongPollingBot {
           str.append(text);
         }
 
+        str.append(String.format("Статус: %s\n", o.getStatus()));
+
         if (!o.getReason().isEmpty()) {
-          str.append("\nПричина відмови: " + o.getReason());
+          str.append(String.format("Причина відмови: %s", o.getReason()));
         }
 
         var m = sendMessage(chatId, str.toString(), null);

@@ -2,7 +2,7 @@ package uzhnu.bot.myclasses;
 
 import java.util.ArrayList;
 
-import uzhnu.bot.database.methods.db;
+import uzhnu.bot.methods.db;
 
 public class UserSession {
     private Long userId;
