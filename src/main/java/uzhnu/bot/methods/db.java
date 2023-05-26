@@ -1,6 +1,9 @@
 package uzhnu.bot.methods;
 
 import java.io.FileInputStream;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.Reader;
 import java.util.ArrayList;
 import java.util.concurrent.CompletableFuture;
 
@@ -19,6 +22,9 @@ import uzhnu.bot.myclasses.*;
 public class db {
 
     static final Logger log = Logger.getLogger(db.class);
+    static final Gson H_GSON = new Gson();
+
+    static final String sessionDbPath = "src/main/java/uzhnu/bot/database/sessionBot.json";
 
     static DatabaseReference database;
 
@@ -151,6 +157,7 @@ public class db {
         }
 
         return future;
+
     }
 
     public static CompletableFuture<ArrayList<ShopItem>> getShopItemFromDb() {
@@ -177,10 +184,6 @@ public class db {
         });
 
         return future;
-    }
-
-    public static ArrayList<Order> getOrdersFromDb(Long orderId) {
-        return null;
     }
 
     public static CompletableFuture<ArrayList<Order>> getUserOrdersFromDb1(Long orderUserId) {
@@ -277,20 +280,74 @@ public class db {
     }
 
     public static void addUserSessionToDb(long userId) {
+        try {
+            ArrayList<UserSession> allSession = getUserSessionFromDb(null);
+
+            allSession.add(new UserSession(userId, 1, 0));
+
+            FileWriter fileWriter = new FileWriter(sessionDbPath);
+            fileWriter.write(H_GSON.toJson(allSession));
+            fileWriter.close();
+            log.info("Session added");
+        } catch (Exception e) {
+            log.info(e.getMessage(), e);
+        }
 
     }
 
     public static ArrayList<UserSession> getUserSessionFromDb(Long userId) {
-        return null;
+        try (Reader reader = new FileReader(sessionDbPath)) {
+            UserSession[] uSessionArr = H_GSON.fromJson(reader, UserSession[].class);
 
+            ArrayList<UserSession> uSession = new ArrayList<UserSession>();
+
+            for (UserSession u : uSessionArr) {
+                uSession.add(u);
+                if (userId != null)
+                    if (u.getUserId().compareTo(userId) == 0) {
+                        uSession.clear();
+                        uSession.add(u);
+                        break;
+                    } else
+                        uSession.clear();
+            }
+
+            if (userId != null && uSession.isEmpty()) {
+                return null;
+            } else {
+                return uSession;
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return null;
     }
 
     public static void editUserSessionFromDb(UserSession userSession) {
+        try {
+            ArrayList<UserSession> allSession = getUserSessionFromDb(null);
 
+            for (int i = 0; i < allSession.size(); i++) {
+                if (allSession.get(i).getUserId().compareTo(userSession.getUserId()) == 0) {
+                    allSession.set(i, userSession);
+                    break;
+                }
+            }
+
+            FileWriter fileWriter = new FileWriter(sessionDbPath);
+            fileWriter.write(H_GSON.toJson(allSession));
+            fileWriter.close();
+            log.info("Session was edited");
+
+        } catch (Exception e) {
+            log.info(e.getMessage(), e);
+        }
     }
 
     public static ArrayList<Message> getMessagesFromDbBotChannel(int messageId) {
         return null;
+
     }
 
     public static void addMessagesToDbBotChannel(Message message) {

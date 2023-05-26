@@ -19,6 +19,17 @@ public class UserSession {
         this.registerStep = registerStep;
         this.editChoice = editChoice;
 
+        db.getShopItemFromDb().thenAccept(resp -> {
+            if (resp != null) {
+                for (var e : resp) {
+                    selectedItem.add(new ShopMenu(e, 0));
+                }
+            }
+        }).exceptionally(ex -> {
+            System.out.println("Error: " + ex.getMessage());
+            return null;
+        });
+
     }
 
     public Order getNewOrder() {
