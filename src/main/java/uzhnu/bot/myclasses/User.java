@@ -9,6 +9,13 @@ public class User {
     public User() {
     }
 
+    public User(Long userId, String userName, String userPhone, int numberOfOrders) {
+        this.userId = userId;
+        this.userName = userName;
+        this.userPhone = userPhone;
+        this.numberOfOrders = numberOfOrders;
+    }
+
     public int getNumberOfOrders() {
         return numberOfOrders;
     }

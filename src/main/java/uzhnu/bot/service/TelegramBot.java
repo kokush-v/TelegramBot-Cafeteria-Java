@@ -228,13 +228,13 @@ public class TelegramBot extends TelegramLongPollingBot {
               if (userSession.getEditChoice() == 1) {
                 if (inputValidation(chatId, update, updMessage, lastTextHistoryMessage)) {
                   editUser.setUserName(lastTextHistoryMessage.getText());
-                  db.editUserFromDb(editUser);
+                  // db.editUserFromDb(editUser);
                   showProfile(chatId, update, 2, updUserId);
                 }
               } else if (userSession.getEditChoice() == 2) {
                 if (isValidPhoneNumber(lastTextHistoryMessage.getText(), chatId, update)) {
                   editUser.setUserPhone(lastTextHistoryMessage.getText());
-                  db.editUserFromDb(editUser);
+                  // db.editUserFromDb(editUser);
                   showProfile(chatId, update, 2, updUserId);
                 }
               }
@@ -421,7 +421,7 @@ public class TelegramBot extends TelegramLongPollingBot {
 
             user.setNumberOfOrders(1);
 
-            db.editUserFromDb(user);
+            // db.editUserFromDb(user);
 
           } catch (Exception e) {
             log.info(e.getMessage(), e);
@@ -452,13 +452,13 @@ public class TelegramBot extends TelegramLongPollingBot {
 
           user.setNumberOfOrders(-1);
 
-          db.editUserFromDb(user);
+          // db.editUserFromDb(user);
 
         }
         case "APPROVE_ORDER" -> {
           if (chatId == botChannel) {
             long orderId = Long.parseLong(updMessage.getText().split("\n")[0].split(" ")[1]);
-            db.editOrderStatus(orderId, 0, "");
+            // db.editOrderStatus(orderId, 0, "");
 
             ArrayList<ReplyButton> replyButtons = new ArrayList<ReplyButton>(
                 Arrays.asList(
@@ -486,7 +486,7 @@ public class TelegramBot extends TelegramLongPollingBot {
               db.removeMessagesFromDbBotChannel(m.getMessageId());
             }
 
-            db.editOrderStatus(orderId, 1, reason);
+            // db.editOrderStatus(orderId, 1, reason);
 
             ArrayList<ReplyButton> replyButtons = new ArrayList<ReplyButton>(
                 Arrays.asList(

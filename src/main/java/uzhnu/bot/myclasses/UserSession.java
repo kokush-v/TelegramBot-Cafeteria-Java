@@ -18,9 +18,7 @@ public class UserSession {
         this.userId = userId;
         this.registerStep = registerStep;
         this.editChoice = editChoice;
-        for (ShopItem m : db.getShopItemFromDb(null)) {
-            selectedItem.add(new ShopMenu(m, 0));
-        }
+
     }
 
     public Order getNewOrder() {

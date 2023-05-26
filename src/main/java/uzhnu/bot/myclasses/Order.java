@@ -13,6 +13,16 @@ public class Order {
     public Order() {
     }
 
+    public Order(String status, Long userId, Long orderId, ArrayList<ShopMenu> orderItems, String reason,
+            Double price) {
+        this.status = status;
+        this.userId = userId;
+        this.orderId = orderId;
+        this.orderItems = orderItems;
+        this.reason = reason;
+        this.price = price;
+    }
+
     public void clear() {
         this.orderItems.clear();
         this.price = 0.0;

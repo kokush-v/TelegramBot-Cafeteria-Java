@@ -1,60 +1,48 @@
 package uzhnu.bot;
 
-import java.io.FileInputStream;
+import java.util.ArrayList;
+import java.util.concurrent.CompletableFuture;
 
-import org.apache.log4j.Logger;
 import org.telegram.telegrambots.meta.TelegramBotsApi;
 import org.telegram.telegrambots.updatesreceivers.DefaultBotSession;
 
-import com.google.auth.oauth2.GoogleCredentials;
-import com.google.firebase.FirebaseApp;
-import com.google.firebase.FirebaseOptions;
-import com.google.firebase.database.*;
-
 import uzhnu.bot.configuration.BotConfig;
+import uzhnu.bot.methods.db;
+import uzhnu.bot.myclasses.ShopItem;
+import uzhnu.bot.myclasses.User;
 import uzhnu.bot.service.TelegramBot;
 
 public class Main {
-    public static void main(String[] args) {
-        Logger log = Logger.getLogger(Main.class);
-        try {
-            TelegramBotsApi telegramBotsApi = new TelegramBotsApi(DefaultBotSession.class);
-            telegramBotsApi.registerBot(new TelegramBot(new BotConfig()));
+    public static void main(String[] args) throws Exception {
 
-            FileInputStream serviceAccount = new FileInputStream("src/main/java/uzhnu/bot/database/tokenFirebase.json");
+        TelegramBotsApi telegramBotsApi = new TelegramBotsApi(DefaultBotSession.class);
+        telegramBotsApi.registerBot(new TelegramBot(new BotConfig()));
 
-            FirebaseOptions options = FirebaseOptions.builder()
-                    .setCredentials(GoogleCredentials.fromStream(serviceAccount))
-                    .setDatabaseUrl("https://cafeteriabotdatabase-default-rtdb.europe-west1.firebasedatabase.app")
-                    .build();
+        db.init();
+        // var promiseArr = ;
+        var promiseInt = db.removeOrderFromDb(1001928215363l);
 
-            FirebaseApp.initializeApp(options);
+        promiseInt.thenAccept(resp -> {
+            if (resp != null) {
 
-            DatabaseReference database = FirebaseDatabase.getInstance().getReference();
+                System.out.println(resp);
 
-            database.addListenerForSingleValueEvent(new ValueEventListener() {
-                @Override
-                public void onDataChange(DataSnapshot dataSnapshot) {
-                    if (dataSnapshot.exists()) {
-                        for (DataSnapshot childSnapshot : dataSnapshot.getChildren()) {
-                            String key = childSnapshot.getKey();
-                            Object value = childSnapshot.getValue();
+            }
+        }).exceptionally(ex -> {
+            System.out.println("Error: " + ex.getMessage());
+            return null;
+        });
 
-                            System.out.println("Key: " + key + ", Value: " + value);
-                        }
-                    } else {
-                        System.out.println("No data found");
-                    }
-                }
-
-                @Override
-                public void onCancelled(DatabaseError databaseError) {
-                    System.out.println("Error: " + databaseError.getMessage());
-                }
-            });
-        } catch (Exception e) {
-            log.info(e.getMessage());
-        }
+        // promiseArr.thenAccept(resp -> {
+        // if (resp != null) {
+        // for (var e : resp) {
+        // System.out.println(e.getUserId());
+        // }
+        // }
+        // }).exceptionally(ex -> {
+        // System.out.println("Error: " + ex.getMessage());
+        // return null;
+        // });
 
     }
 }
