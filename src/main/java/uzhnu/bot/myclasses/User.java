@@ -22,6 +22,10 @@ public class User {
 
     public void setNumberOfOrders(int numberOfOrders) {
         this.numberOfOrders += numberOfOrders;
+
+        if (this.numberOfOrders < 0) {
+            this.numberOfOrders = 0;
+        }
     }
 
     public Long getUserId() {

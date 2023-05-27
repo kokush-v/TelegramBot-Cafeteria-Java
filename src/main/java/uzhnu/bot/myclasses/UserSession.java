@@ -1,6 +1,7 @@
 package uzhnu.bot.myclasses;
 
 import java.util.ArrayList;
+import java.util.concurrent.CompletableFuture;
 
 import uzhnu.bot.methods.db;
 
@@ -19,17 +20,25 @@ public class UserSession {
         this.registerStep = registerStep;
         this.editChoice = editChoice;
 
+    }
+
+    public CompletableFuture<UserSession> initUserSessionItems() {
+        CompletableFuture<UserSession> future = new CompletableFuture<>();
+
         db.getShopItemFromDb().thenAccept(resp -> {
             if (resp != null) {
                 for (var e : resp) {
+                    System.out.println(e.getId());
                     selectedItem.add(new ShopMenu(e, 0));
                 }
+                future.complete(this);
             }
         }).exceptionally(ex -> {
             System.out.println("Error: " + ex.getMessage());
             return null;
         });
 
+        return future;
     }
 
     public Order getNewOrder() {

@@ -51,10 +51,10 @@ public class db {
                     @Override
                     public void onComplete(DatabaseError error, DatabaseReference ref) {
                         if (error == null) {
-                            System.out.println("user was configurated");
+                            log.info("user was configurated");
                             future.complete(0);
                         } else {
-                            System.out.println("Error: " + error.getMessage());
+                            log.info("Error: " + error.getMessage());
                             future.complete(1);
                         }
 
@@ -65,53 +65,7 @@ public class db {
 
     }
 
-    public static ArrayList<User> getUsersFromDb(Long userId) {
-        ArrayList<User> usersArr = new ArrayList<>();
-        if (userId == null) {
-            db.database.child("users").addListenerForSingleValueEvent(new ValueEventListener() {
-
-                @Override
-                public void onDataChange(DataSnapshot snapshot) {
-                    if (snapshot.exists()) {
-
-                        for (DataSnapshot userSnapshot : snapshot.getChildren()) {
-                            usersArr.add(userSnapshot.getValue(User.class));
-                        }
-                    }
-                }
-
-                @Override
-                public void onCancelled(DatabaseError error) {
-                    System.out.println("Error: " + error.getMessage());
-                }
-
-            });
-        } else {
-            db.database.child(("users/" + userId).toString())
-                    .addListenerForSingleValueEvent(new ValueEventListener() {
-
-                        @Override
-                        public void onDataChange(DataSnapshot snapshot) {
-                            if (snapshot.exists()) {
-                                usersArr.add(snapshot.getValue(User.class));
-                            }
-                        }
-
-                        @Override
-                        public void onCancelled(DatabaseError error) {
-                            System.out.println("Error: " + error.getMessage());
-                        }
-
-                    });
-        }
-
-        if (usersArr.isEmpty())
-            return null;
-
-        return usersArr;
-    }
-
-    public static CompletableFuture<ArrayList<User>> getUsersFromDb1(Long userId) {
+    public static CompletableFuture<ArrayList<User>> getUsersFromDb(Long userId) {
         CompletableFuture<ArrayList<User>> future = new CompletableFuture<>();
 
         ArrayList<User> usersArr = new ArrayList<>();
@@ -131,7 +85,7 @@ public class db {
 
                 @Override
                 public void onCancelled(DatabaseError error) {
-                    System.out.println("Error: " + error.getMessage());
+                    log.info("Error: " + error.getMessage());
                 }
 
             });
@@ -150,7 +104,7 @@ public class db {
 
                         @Override
                         public void onCancelled(DatabaseError error) {
-                            System.out.println("Error: " + error.getMessage());
+                            log.info("Error: " + error.getMessage());
                         }
 
                     });
@@ -178,7 +132,7 @@ public class db {
 
             @Override
             public void onCancelled(DatabaseError error) {
-                System.out.println("Error: " + error.getMessage());
+                log.info("Error: " + error.getMessage());
             }
 
         });
@@ -190,24 +144,23 @@ public class db {
         CompletableFuture<ArrayList<Order>> future = new CompletableFuture<>();
 
         ArrayList<Order> orders = new ArrayList<>();
-
-        db.database.child("orders").orderByChild("userId").startAt(orderUserId)
+        db.database.child(String.format("orders/%s", orderUserId))
                 .addListenerForSingleValueEvent(new ValueEventListener() {
 
                     @Override
                     public void onDataChange(DataSnapshot snapshot) {
-                        if (snapshot.exists()) {
 
+                        if (snapshot.exists()) {
                             for (DataSnapshot eSnapshot : snapshot.getChildren()) {
                                 orders.add(eSnapshot.getValue(Order.class));
                             }
-                            future.complete(orders);
                         }
+                        future.complete(orders);
                     }
 
                     @Override
                     public void onCancelled(DatabaseError error) {
-                        System.out.println("Error: " + error.getMessage());
+                        log.info("Error: " + error.getMessage());
                     }
 
                 });
@@ -218,15 +171,15 @@ public class db {
     public static CompletableFuture<Integer> addOrderToDb(Order order) {
         CompletableFuture<Integer> future = new CompletableFuture<>();
 
-        db.database.child(String.format("orders/%s", order.getOrderId().toString())).setValue(order,
+        db.database.child(String.format("orders/%s/%s", order.getUserId(), order.getOrderId())).setValue(order,
                 new CompletionListener() {
                     @Override
                     public void onComplete(DatabaseError error, DatabaseReference ref) {
                         if (error == null) {
-                            System.out.println("order was configurated");
+                            log.info("order was configurated");
                             future.complete(0);
                         } else {
-                            System.out.println("Error: " + error.getMessage());
+                            log.info("Error: " + error.getMessage());
                             future.complete(1);
                         }
                     }
@@ -235,64 +188,82 @@ public class db {
         return future;
     }
 
-    public static CompletableFuture<Integer> editOrderStatus(long orderId, int status) {
+    public static CompletableFuture<Integer> editOrderStatus(long orderId, long userId, int status, String reason) {
         CompletableFuture<Integer> future = new CompletableFuture<>();
-        String statuString = "Схваленно";
+        String statuString = "Схваленно ✅";
 
         if (status == 1) {
-            statuString = "Відхилено";
+            statuString = "Відхилено ❌";
         }
 
-        db.database.child("orders/" + orderId + "/status").setValue(statuString,
+        db.database.child(String.format("orders/%s/%s/status", userId, orderId)).setValue(statuString,
                 new CompletionListener() {
                     @Override
                     public void onComplete(DatabaseError error, DatabaseReference ref) {
                         if (error == null) {
-                            System.out.println("status was configurated");
+                            log.info("status was configurated");
                             future.complete(0);
                         } else {
-                            System.out.println("Error: " + error.getMessage());
+                            log.info("Error: " + error.getMessage());
+                            future.complete(1);
+                        }
+                    }
+                });
+        log.info(reason, null);
+
+        db.database.child(String.format("orders/%s/%s/reason", userId, orderId)).setValue(reason,
+                new CompletionListener() {
+                    @Override
+                    public void onComplete(DatabaseError error, DatabaseReference ref) {
+                        if (error == null) {
+                            log.info("reason added was configurated");
+                            future.complete(0);
+                        } else {
+                            log.info("Error: " + error.getMessage());
                             future.complete(1);
                         }
                     }
                 });
 
         return future;
+
     }
 
-    public static CompletableFuture<Integer> removeOrderFromDb(Long orderId) {
+    public static CompletableFuture<Integer> removeOrderFromDb(Long orderId, Long userId) {
         CompletableFuture<Integer> future = new CompletableFuture<>();
-
-        db.database.child("orders/" + orderId).removeValue(new DatabaseReference.CompletionListener() {
-            @Override
-            public void onComplete(DatabaseError error, DatabaseReference ref) {
-                if (error == null) {
-                    System.out.println("order deleted successfully");
-                    future.complete(0);
-                } else {
-                    System.out.println("Failed to delete order: " + error.getMessage());
-                    future.complete(1);
-                }
-            }
-        });
+        db.database.child(String.format("orders/%s/%s", userId, orderId))
+                .removeValue(new DatabaseReference.CompletionListener() {
+                    @Override
+                    public void onComplete(DatabaseError error, DatabaseReference ref) {
+                        if (error == null) {
+                            log.info("order deleted successfully");
+                            future.complete(0);
+                        } else {
+                            log.info("Failed to delete order: " + error.getMessage());
+                            future.complete(1);
+                        }
+                    }
+                });
 
         return future;
     }
 
     public static void addUserSessionToDb(long userId) {
-        try {
-            ArrayList<UserSession> allSession = getUserSessionFromDb(null);
 
-            allSession.add(new UserSession(userId, 1, 0));
+        ArrayList<UserSession> allSession = getUserSessionFromDb(null);
+        var u = new UserSession(userId, 1, 0);
 
-            FileWriter fileWriter = new FileWriter(sessionDbPath);
-            fileWriter.write(H_GSON.toJson(allSession));
-            fileWriter.close();
-            log.info("Session added");
-        } catch (Exception e) {
-            log.info(e.getMessage(), e);
-        }
-
+        u.initUserSessionItems().thenAccept(res -> {
+            allSession.add(res);
+            try {
+                FileWriter fileWriter = new FileWriter(sessionDbPath);
+                fileWriter.write(H_GSON.toJson(allSession));
+                fileWriter.close();
+                log.info("session added");
+            } catch (Exception e) {
+                log.info(e.getMessage(), e);
+            }
+        });
     }
 
     public static ArrayList<UserSession> getUserSessionFromDb(Long userId) {
@@ -338,7 +309,7 @@ public class db {
             FileWriter fileWriter = new FileWriter(sessionDbPath);
             fileWriter.write(H_GSON.toJson(allSession));
             fileWriter.close();
-            log.info("Session was edited");
+            log.info("session was edited");
 
         } catch (Exception e) {
             log.info(e.getMessage(), e);
@@ -383,7 +354,7 @@ public class db {
             FileWriter fileWriter = new FileWriter(botChannel);
             fileWriter.write(H_GSON.toJson(allMessages));
             fileWriter.close();
-            log.info("Message added");
+            log.info("message added");
         } catch (Exception e) {
             log.info(e.getMessage(), e);
         }
@@ -404,7 +375,7 @@ public class db {
             FileWriter fileWriter = new FileWriter(botChannel);
             fileWriter.write(H_GSON.toJson(allMessages));
             fileWriter.close();
-            log.info("Message was edited");
+            log.info("message was edited");
 
         } catch (Exception e) {
             log.info(e.getMessage(), e);
@@ -424,11 +395,42 @@ public class db {
             FileWriter fileWriter = new FileWriter(botChannel);
             fileWriter.write(H_GSON.toJson(allMessages));
             fileWriter.close();
-            log.info("Message was removed from database");
+            log.info("message was removed from database");
         } catch (Exception e) {
             log.info(e.getMessage(), e);
         }
 
+    }
+
+    public static ArrayList<Message> getOrderById(Long orderId) {
+        try (Reader reader = new FileReader(botChannel)) {
+            Message[] messagesArr = H_GSON.fromJson(reader, Message[].class);
+            Long mesId = 0l;
+            ArrayList<Message> messages = new ArrayList<Message>();
+
+            for (Message m : messagesArr) {
+                messages.add(m);
+                if (orderId != null)
+                    mesId = Long.parseLong(m.getText().split("\n")[0].split(" ")[1]);
+
+                if (mesId.compareTo(orderId) == 0) {
+                    messages.clear();
+                    messages.add(m);
+                    break;
+                } else
+                    messages.clear();
+            }
+
+            if (orderId != 0 && messages.isEmpty()) {
+                return null;
+            } else {
+                return messages;
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return null;
     }
 
 }

@@ -1,9 +1,11 @@
 package uzhnu.bot.service;
 
+import java.io.Console;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -23,6 +25,7 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKe
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
+import io.netty.util.concurrent.CompleteFuture;
 import uzhnu.bot.configuration.BotConfig;
 import uzhnu.bot.methods.db;
 import uzhnu.bot.myclasses.Order;
@@ -224,30 +227,34 @@ public class TelegramBot extends TelegramLongPollingBot {
             }
             case 4 -> {
 
-              User editUser = db.getUsersFromDb(updUserId).get(0);
+              db.getUsersFromDb(updUserId).thenAccept(res -> {
+                if (!res.isEmpty()) {
+                  User editUser = res.get(0);
 
-              if (userSession.getEditChoice() == 1) {
-                if (inputValidation(chatId, update, updMessage, lastTextHistoryMessage)) {
-                  editUser.setUserName(lastTextHistoryMessage.getText());
-                  db.addUserToDb(editUser).thenAccept(resp -> {
-                    if (resp == 0)
-                      showProfile(chatId, update, 2, updUserId);
-                    else
-                      log.info("error");
-                  });
+                  if (userSession.getEditChoice() == 1) {
+                    if (inputValidation(chatId, update, updMessage, lastTextHistoryMessage)) {
+                      editUser.setUserName(lastTextHistoryMessage.getText());
+                      db.addUserToDb(editUser).thenAccept(resp -> {
+                        if (resp == 0)
+                          showProfile(chatId, update, 2, updUserId);
+                        else
+                          log.info("error");
+                      });
 
+                    }
+                  } else if (userSession.getEditChoice() == 2) {
+                    if (isValidPhoneNumber(lastTextHistoryMessage.getText(), chatId, update)) {
+                      editUser.setUserPhone(lastTextHistoryMessage.getText());
+                      db.addUserToDb(editUser).thenAccept(resp -> {
+                        if (resp == 0)
+                          showProfile(chatId, update, 2, updUserId);
+                        else
+                          log.info("error");
+                      });
+                    }
+                  }
                 }
-              } else if (userSession.getEditChoice() == 2) {
-                if (isValidPhoneNumber(lastTextHistoryMessage.getText(), chatId, update)) {
-                  editUser.setUserPhone(lastTextHistoryMessage.getText());
-                  db.addUserToDb(editUser).thenAccept(resp -> {
-                    if (resp == 0)
-                      showProfile(chatId, update, 2, updUserId);
-                    else
-                      log.info("error");
-                  });
-                }
-              }
+              });
             }
           }
         }
@@ -400,43 +407,42 @@ public class TelegramBot extends TelegramLongPollingBot {
         }
 
         case "SEND_ORDER" -> {
-          Order newOrder = db.getUserSessionFromDb(updUserId).get(0).getNewOrder();
-
           try {
+            Order newOrder = db.getUserSessionFromDb(updUserId).get(0).getNewOrder();
             newOrder.setUserId(updUserId);
 
-            db.addOrderToDb(newOrder).thenAccept(res -> {
-              if (res != null)
-                sendOrderToChannel(newOrder);
-            });
+            db.getUserOrdersFromDb(updUserId).thenAccept(res -> {
+              newOrder.setOrderId(res.size() + 1);
+            }).thenCompose(res -> {
+              return db.addOrderToDb(newOrder);
+            }).thenCompose(r -> {
+              if (r == 0) {
+                return sendOrderToChannel(newOrder);
+              }
+              return null;
+            }).thenAccept(r -> {
+              var m = sendMessage(chatId,
+                  "Замовлення було успішно відправлено 👌.\nВ профілі ви можете побачити свої замовлення 👉📱",
+                  null);
 
-            var m = sendMessage(chatId,
-                "Замовлення було успішно відправлено 👌.\nВ профілі ви можете побачити свої замовлення 👉📱",
-                null);
+              ArrayList<ReplyButton> replyButtons = new ArrayList<ReplyButton>(
+                  Arrays.asList(
+                      new ReplyButton("Повернутись до профілю", "PROFILE"),
+                      new ReplyButton("Повернутись до меню", "MENU")));
 
-            ArrayList<ReplyButton> replyButtons = new ArrayList<ReplyButton>(
-                Arrays.asList(
-                    new ReplyButton("Повернутись до профілю", "PROFILE"),
-                    new ReplyButton("Повернутись до меню", "MENU")));
-
-            for (ShopMenu i : userSession.getSelectedItem()) {
-              i.setAmount(0);
-            }
-            newOrder.clear();
-
-            userSession.setNewOrder(newOrder);
-            db.editUserSessionFromDb(userSession);
-            setReplyButtonsOnMessage(replyButtons, chatId, m.getMessageId(), m.getText());
-
-            User user = db.getUsersFromDb(updUserId).get(0);
-
-            user.setNumberOfOrders(1);
-
-            db.addUserToDb(user).thenAccept(resp -> {
-              if (resp == 0)
-                log.info("user was configurated");
-              else
-                log.info("error");
+              for (ShopMenu i : userSession.getSelectedItem()) {
+                i.setAmount(0);
+              }
+              newOrder.clear();
+              userSession.setNewOrder(newOrder);
+              db.editUserSessionFromDb(userSession);
+              setReplyButtonsOnMessage(replyButtons, chatId, m.getMessageId(), m.getText());
+            }).thenCompose(r -> {
+              return db.getUsersFromDb(updUserId);
+            }).thenCompose(res -> {
+              User user = res.get(0);
+              user.setNumberOfOrders(1);
+              return db.addUserToDb(user);
             });
 
           } catch (Exception e) {
@@ -456,30 +462,32 @@ public class TelegramBot extends TelegramLongPollingBot {
           d.setChatId(m.getChatId());
           d.setMessageId(m.getMessageId());
 
-          try {
-            this.execute(d);
-          } catch (Exception e) {
-          }
-
           db.removeMessagesFromDbBotChannel(m.getMessageId());
-          db.removeOrderFromDb(orderId);
+          db.removeOrderFromDb(orderId, updUserId).thenAccept(r -> {
+            try {
+              this.execute(d);
+            } catch (Exception e) {
+            }
+          });
 
-          User user = db.getUsersFromDb(updUserId).get(0);
+          db.getUsersFromDb(updUserId).thenAccept(res -> {
+            User user = res.get(0);
 
-          user.setNumberOfOrders(-1);
+            user.setNumberOfOrders(-1);
 
-          db.addUserToDb(user).thenAccept(resp -> {
-            if (resp == 0)
-              log.info("user was configurated");
-            else
-              log.info("error");
+            db.addUserToDb(user).thenAccept(resp -> {
+              if (resp == 0)
+                log.info("user was configurated");
+              else
+                log.info("error");
+            });
           });
 
         }
         case "APPROVE_ORDER" -> {
           if (chatId == botChannel) {
             long orderId = Long.parseLong(updMessage.getText().split("\n")[0].split(" ")[1]);
-            db.editOrderStatus(orderId, 0, "");
+            db.editOrderStatus(orderId, updUserId, 0, "");
 
             ArrayList<ReplyButton> replyButtons = new ArrayList<ReplyButton>(
                 Arrays.asList(
@@ -506,29 +514,30 @@ public class TelegramBot extends TelegramLongPollingBot {
               deleteMessages(botChannel, 1, update);
               db.removeMessagesFromDbBotChannel(m.getMessageId());
             }
+            db.editOrderStatus(orderId, updUserId, 1, reason).thenAccept(r -> {
 
-            db.editOrderStatus(orderId, 1, reason);
+              ArrayList<ReplyButton> replyButtons = new ArrayList<ReplyButton>(
+                  Arrays.asList(
+                      new ReplyButton("✅", "APPROVE_ORDER"),
+                      new ReplyButton("🔴", "ORDER_STATUS"),
+                      new ReplyButton("❌", "DECLINE_ORDER")));
 
-            ArrayList<ReplyButton> replyButtons = new ArrayList<ReplyButton>(
-                Arrays.asList(
-                    new ReplyButton("✅", "APPROVE_ORDER"),
-                    new ReplyButton("🔴", "ORDER_STATUS"),
-                    new ReplyButton("❌", "DECLINE_ORDER")));
+              setReplyButtonsOnMessage(replyButtons, chatId, messageId, updMessage.getText());
 
-            setReplyButtonsOnMessage(replyButtons, chatId, messageId, updMessage.getText());
+              db.editMessagesFromDbBotChannel(updMessage);
 
-            db.editMessagesFromDbBotChannel(updMessage);
+            });
 
           }
         }
 
         case "UPDATE_PROF_MENU" -> {
 
-          User user = db.getUsersFromDb(updUserId).get(0);
-
-          deleteMessages(chatId, user.getNumberOfOrders(), update);
-
-          showProfMenu(chatId, updUserId);
+          db.getUsersFromDb(updUserId).thenAccept(res -> {
+            User user = res.get(0);
+            deleteMessages(chatId, user.getNumberOfOrders(), update);
+            showProfMenu(chatId, updUserId);
+          });
 
         }
 
@@ -548,33 +557,34 @@ public class TelegramBot extends TelegramLongPollingBot {
   private void showProfile(long chatId, Update update, int deleteCount, long userId) {
     deleteMessages(chatId, deleteCount, update);
 
-    User user = db.getUsersFromDb(userId).get(0);
+    db.getUsersFromDb(userId).thenAccept(res -> {
+      User user = res.get(0);
 
-    String profileData = String.format(
-        "Доброго дня, %s!\n\n\n  👤 Ім'я: %s\n\n  📲 Нормер телефону: %s\n\n\nВаші замовлення 👇:\n",
-        user.getUserName(), user.getUserName(), user.getUserPhone());
+      String profileData = String.format(
+          "Доброго дня, %s!\n\n\n  👤 Ім'я: %s\n\n  📲 Нормер телефону: %s\n\n\nВаші замовлення 👇:\n",
+          user.getUserName(), user.getUserName(), user.getUserPhone());
 
-    var profMessage = sendMessage(chatId, profileData, null);
+      var profMessage = sendMessage(chatId, profileData, null);
 
-    ArrayList<ReplyButton> replyButtons = new ArrayList<ReplyButton>(
-        List.of(
-            new ReplyButton("Змінити профіль", "EDIT_PROFILE"),
-            new ReplyButton("Оновити меню замовлень", "UPDATE_PROF_MENU"),
-            new ReplyButton("Подивитись меню", "MENU")));
+      ArrayList<ReplyButton> replyButtons = new ArrayList<ReplyButton>(
+          List.of(
+              new ReplyButton("Змінити профіль", "EDIT_PROFILE"),
+              new ReplyButton("Оновити меню замовлень", "UPDATE_PROF_MENU"),
+              new ReplyButton("Подивитись меню", "MENU")));
 
-    setReplyButtonsOnMessage(replyButtons, chatId, profMessage.getMessageId(), profileData);
+      setReplyButtonsOnMessage(replyButtons, chatId, profMessage.getMessageId(), profileData);
 
-    showProfMenu(chatId, userId);
+      showProfMenu(chatId, userId);
+    });
 
   }
 
   private void showProfMenu(long chatId, long userId) {
 
-    db.getUserOrdersFromDb(user.getUserId()).thenAccept(res -> {
-      if (res == null) {
+    db.getUserOrdersFromDb(userId).thenAccept(res -> {
+      if (res.isEmpty()) {
         sendMessage(chatId, "(Замовлень немає)", null);
       } else {
-
         ArrayList<ReplyButton> replyButtons1 = new ArrayList<ReplyButton>(
             Arrays.asList(
                 new ReplyButton("Відмінити", "CANCEL_ORDER")));
@@ -640,8 +650,9 @@ public class TelegramBot extends TelegramLongPollingBot {
 
   }
 
-  private void sendOrderToChannel(Order sendedOrder) {
+  private CompletableFuture<Integer> sendOrderToChannel(Order sendedOrder) {
     Order userOrder = sendedOrder;
+    CompletableFuture<Integer> future = new CompletableFuture<>();
 
     ArrayList<ReplyButton> replyButtons1 = new ArrayList<ReplyButton>(
         Arrays.asList(
@@ -649,27 +660,37 @@ public class TelegramBot extends TelegramLongPollingBot {
             new ReplyButton("🔃", "ORDER_STATUS"),
             new ReplyButton("❌", "DECLINE_ORDER")));
 
-    var user = db.getUsersFromDb(userOrder.getUserId()).get(0);
+    db.getUsersFromDb(userOrder.getUserId()).thenAccept(res -> {
+      var user = res.get(0);
 
-    StringBuilder str = new StringBuilder();
-    str.append(String.format("\n№ %s | Ім'я: %s( %s )\n\n", userOrder.getOrderId(),
-        user.getUserName(), user.getUserPhone()));
+      StringBuilder str = new StringBuilder();
+      str.append(String.format("\n№ %s | Ім'я: %s( %s )\n\n", userOrder.getOrderId(),
+          user.getUserName(), user.getUserPhone()));
 
-    for (ShopMenu i : userOrder.getOrderItems()) {
-      var text = String.format("%s:    %s шт.\n%s грн\n\n",
-          i.getItem().getItemName(),
-          String.valueOf(i.getAmount()),
-          String.valueOf(i.getItem().getItemPrice()));
+      for (ShopMenu i : userOrder.getOrderItems()) {
+        var text = String.format("%s:    %s шт.\n%s грн\n\n",
+            i.getItem().getItemName(),
+            String.valueOf(i.getAmount()),
+            String.valueOf(i.getItem().getItemPrice()));
 
-      str.append(text);
-    }
+        str.append(text);
+      }
 
-    str.append(String.format("Загальа ціна: %s", String.valueOf(userOrder.getPrice())));
+      str.append(String.format("Загальа ціна: %s", String.valueOf(userOrder.getPrice())));
 
-    var m = sendMessage(botChannel, str.toString(), null);
-    setReplyButtonsOnMessage(replyButtons1, botChannel, m.getMessageId(), str.toString());
+      var m = sendMessage(botChannel, str.toString(), null);
+      setReplyButtonsOnMessage(replyButtons1, botChannel, m.getMessageId(), str.toString());
 
-    db.addMessagesToDbBotChannel(m);
+      db.addMessagesToDbBotChannel(m);
+
+      future.complete(0);
+    }).exceptionally(e -> {
+      future.complete(1);
+      return null;
+    });
+
+    return future;
+
   }
 
   private Boolean inputValidation(long chatId, Update update, Message updMessage, Message lastTextHistoryMessage) {
@@ -824,30 +845,31 @@ public class TelegramBot extends TelegramLongPollingBot {
 
   private void userReg(long chatId, long updUserId, int messageId) {
 
-    if (db.getUsersFromDb(updUserId) != null)
-      if (db.getUsersFromDb(updUserId).get(0).getUserId().compareTo(updUserId) == 0) {
-        log.info("User already exist");
-        ArrayList<ReplyButton> replyButtons = new ArrayList<ReplyButton>(
-            List.of(
-                new ReplyButton("Профіль", "PROFILE")));
+    db.getUsersFromDb(updUserId).thenAccept(res -> {
+      if (!res.isEmpty())
+        if (res.get(0).getUserId().compareTo(updUserId) == 0) {
+          log.info("User already exist");
+          ArrayList<ReplyButton> replyButtons = new ArrayList<ReplyButton>(
+              List.of(
+                  new ReplyButton("Профіль", "PROFILE")));
 
-        var m = sendMessage(chatId, "Ви вже були зареєстрованні 🤔", null);
+          var m = sendMessage(chatId, "Ви вже були зареєстрованні 🤔", null);
 
-        setReplyButtonsOnMessage(replyButtons, chatId, m.getMessageId(),
-            "Ви вже були зареєстрованні 🤔");
+          setReplyButtonsOnMessage(replyButtons, chatId, m.getMessageId(),
+              "Ви вже були зареєстрованні 🤔");
 
-        return;
-      }
-    String messageText = "Будь ласка вкажіть своє ім'я 😊";
+          return;
+        }
+      String messageText = "Будь ласка вкажіть своє ім'я 😊";
 
-    var messegeNew = sendMessage(chatId, messageText, null);
+      var messegeNew = sendMessage(chatId, messageText, null);
 
-    ArrayList<ReplyButton> replyButtons = new ArrayList<ReplyButton>(
-        List.of(
-            new ReplyButton("Зберегти", "SAVE_DATA")));
+      ArrayList<ReplyButton> replyButtons = new ArrayList<ReplyButton>(
+          List.of(
+              new ReplyButton("Зберегти", "SAVE_DATA")));
 
-    setReplyButtonsOnMessage(replyButtons, chatId, messegeNew.getMessageId(), messageText);
-
+      setReplyButtonsOnMessage(replyButtons, chatId, messegeNew.getMessageId(), messageText);
+    });
   }
 
   private Boolean isValidPhoneNumber(String phoneNumber, long chatId, Update update) {

@@ -11,16 +11,7 @@ public class Order {
     private Double price = 0.0;
 
     public Order() {
-    }
-
-    public Order(String status, Long userId, Long orderId, ArrayList<ShopMenu> orderItems, String reason,
-            Double price) {
-        this.status = status;
-        this.userId = userId;
-        this.orderId = orderId;
-        this.orderItems = orderItems;
-        this.reason = reason;
-        this.price = price;
+        this.status = "Опрацьовується 🔃";
     }
 
     public void clear() {
