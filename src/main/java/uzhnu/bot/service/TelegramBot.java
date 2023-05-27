@@ -212,11 +212,12 @@ public class TelegramBot extends TelegramLongPollingBot {
                 setReplyButtonsOnMessage(replyButtons, chatId, messageId,
                     "Ви були зареєстровані. Дякую за реєстрацію 👌😊");
 
-                db.addUserToDb(user);
-
-                userSession.setRegisterStep(4);
-                db.editUserSessionFromDb(userSession);
-
+                db.addUserToDb(user).thenAccept(res -> {
+                  if (res == 0) {
+                    userSession.setRegisterStep(4);
+                    db.editUserSessionFromDb(userSession);
+                  }
+                });
               } catch (Exception e) {
                 e.printStackTrace();
               }
@@ -228,14 +229,23 @@ public class TelegramBot extends TelegramLongPollingBot {
               if (userSession.getEditChoice() == 1) {
                 if (inputValidation(chatId, update, updMessage, lastTextHistoryMessage)) {
                   editUser.setUserName(lastTextHistoryMessage.getText());
-                  // db.editUserFromDb(editUser);
-                  showProfile(chatId, update, 2, updUserId);
+                  db.addUserToDb(editUser).thenAccept(resp -> {
+                    if (resp == 0)
+                      showProfile(chatId, update, 2, updUserId);
+                    else
+                      log.info("error");
+                  });
+
                 }
               } else if (userSession.getEditChoice() == 2) {
                 if (isValidPhoneNumber(lastTextHistoryMessage.getText(), chatId, update)) {
                   editUser.setUserPhone(lastTextHistoryMessage.getText());
-                  // db.editUserFromDb(editUser);
-                  showProfile(chatId, update, 2, updUserId);
+                  db.addUserToDb(editUser).thenAccept(resp -> {
+                    if (resp == 0)
+                      showProfile(chatId, update, 2, updUserId);
+                    else
+                      log.info("error");
+                  });
                 }
               }
             }
@@ -395,9 +405,10 @@ public class TelegramBot extends TelegramLongPollingBot {
           try {
             newOrder.setUserId(updUserId);
 
-            db.addOrderToDb(newOrder);
-
-            sendOrderToChannel(newOrder);
+            db.addOrderToDb(newOrder).thenAccept(res -> {
+              if (res != null)
+                sendOrderToChannel(newOrder);
+            });
 
             var m = sendMessage(chatId,
                 "Замовлення було успішно відправлено 👌.\nВ профілі ви можете побачити свої замовлення 👉📱",
@@ -421,7 +432,12 @@ public class TelegramBot extends TelegramLongPollingBot {
 
             user.setNumberOfOrders(1);
 
-            // db.editUserFromDb(user);
+            db.addUserToDb(user).thenAccept(resp -> {
+              if (resp == 0)
+                log.info("user was configurated");
+              else
+                log.info("error");
+            });
 
           } catch (Exception e) {
             log.info(e.getMessage(), e);
@@ -452,13 +468,18 @@ public class TelegramBot extends TelegramLongPollingBot {
 
           user.setNumberOfOrders(-1);
 
-          // db.editUserFromDb(user);
+          db.addUserToDb(user).thenAccept(resp -> {
+            if (resp == 0)
+              log.info("user was configurated");
+            else
+              log.info("error");
+          });
 
         }
         case "APPROVE_ORDER" -> {
           if (chatId == botChannel) {
             long orderId = Long.parseLong(updMessage.getText().split("\n")[0].split(" ")[1]);
-            // db.editOrderStatus(orderId, 0, "");
+            db.editOrderStatus(orderId, 0, "");
 
             ArrayList<ReplyButton> replyButtons = new ArrayList<ReplyButton>(
                 Arrays.asList(
@@ -486,7 +507,7 @@ public class TelegramBot extends TelegramLongPollingBot {
               db.removeMessagesFromDbBotChannel(m.getMessageId());
             }
 
-            // db.editOrderStatus(orderId, 1, reason);
+            db.editOrderStatus(orderId, 1, reason);
 
             ArrayList<ReplyButton> replyButtons = new ArrayList<ReplyButton>(
                 Arrays.asList(
@@ -548,41 +569,42 @@ public class TelegramBot extends TelegramLongPollingBot {
   }
 
   private void showProfMenu(long chatId, long userId) {
-    User user = db.getUsersFromDb(userId).get(0);
-    var userOrders = db.getUserOrdersFromDb(user.getUserId());
 
-    if (userOrders == null) {
-      sendMessage(chatId, "(Замовлень немає)", null);
-    } else {
+    db.getUserOrdersFromDb(user.getUserId()).thenAccept(res -> {
+      if (res == null) {
+        sendMessage(chatId, "(Замовлень немає)", null);
+      } else {
 
-      ArrayList<ReplyButton> replyButtons1 = new ArrayList<ReplyButton>(
-          Arrays.asList(
-              new ReplyButton("Відмінити", "CANCEL_ORDER")));
+        ArrayList<ReplyButton> replyButtons1 = new ArrayList<ReplyButton>(
+            Arrays.asList(
+                new ReplyButton("Відмінити", "CANCEL_ORDER")));
 
-      for (Order o : userOrders) {
-        StringBuilder str = new StringBuilder();
-        str.append(String.format("\n№ %s\n\n", o.getOrderId()));
+        for (Order o : res) {
+          StringBuilder str = new StringBuilder();
+          str.append(String.format("\n№ %s\n\n", o.getOrderId()));
 
-        for (ShopMenu i : o.getOrderItems()) {
-          var text = String.format("%s:    %s шт.\n%s грн\n\n",
-              i.getItem().getItemName(),
-              String.valueOf(i.getAmount()),
-              String.valueOf(i.getItem().getItemPrice()),
-              o.getStatus());
+          for (ShopMenu i : o.getOrderItems()) {
+            var text = String.format("%s:    %s шт.\n%s грн\n\n",
+                i.getItem().getItemName(),
+                String.valueOf(i.getAmount()),
+                String.valueOf(i.getItem().getItemPrice()),
+                o.getStatus());
 
-          str.append(text);
+            str.append(text);
+          }
+
+          str.append(String.format("Статус: %s\n", o.getStatus()));
+
+          if (!o.getReason().isEmpty()) {
+            str.append(String.format("Причина відмови: %s", o.getReason()));
+          }
+
+          var m = sendMessage(chatId, str.toString(), null);
+          setReplyButtonsOnMessage(replyButtons1, chatId, m.getMessageId(), str.toString());
         }
-
-        str.append(String.format("Статус: %s\n", o.getStatus()));
-
-        if (!o.getReason().isEmpty()) {
-          str.append(String.format("Причина відмови: %s", o.getReason()));
-        }
-
-        var m = sendMessage(chatId, str.toString(), null);
-        setReplyButtonsOnMessage(replyButtons1, chatId, m.getMessageId(), str.toString());
       }
-    }
+    });
+
   }
 
   private void showMenu(long chatId, long userId) {

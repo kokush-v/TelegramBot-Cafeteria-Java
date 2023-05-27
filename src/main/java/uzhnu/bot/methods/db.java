@@ -25,7 +25,7 @@ public class db {
     static final Gson H_GSON = new Gson();
 
     static final String sessionDbPath = "src/main/java/uzhnu/bot/database/sessionBot.json";
-
+    static final String botChannel = "src/main/java/uzhnu/bot/database/bot_channel.json";
     static DatabaseReference database;
 
     public static void init() throws Exception {
@@ -186,7 +186,7 @@ public class db {
         return future;
     }
 
-    public static CompletableFuture<ArrayList<Order>> getUserOrdersFromDb1(Long orderUserId) {
+    public static CompletableFuture<ArrayList<Order>> getUserOrdersFromDb(Long orderUserId) {
         CompletableFuture<ArrayList<Order>> future = new CompletableFuture<>();
 
         ArrayList<Order> orders = new ArrayList<>();
@@ -346,19 +346,88 @@ public class db {
     }
 
     public static ArrayList<Message> getMessagesFromDbBotChannel(int messageId) {
-        return null;
+        try (Reader reader = new FileReader(botChannel)) {
+            Message[] messagesArr = H_GSON.fromJson(reader, Message[].class);
 
+            ArrayList<Message> messages = new ArrayList<Message>();
+
+            for (Message m : messagesArr) {
+                messages.add(m);
+                if (messageId != 0)
+                    if (m.getMessageId() == messageId) {
+                        messages.clear();
+                        messages.add(m);
+                        break;
+                    } else
+                        messages.clear();
+            }
+
+            if (messageId != 0 && messages.isEmpty()) {
+                return null;
+            } else {
+                return messages;
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return null;
     }
 
     public static void addMessagesToDbBotChannel(Message message) {
+        try {
+            ArrayList<Message> allMessages = getMessagesFromDbBotChannel(0);
+
+            allMessages.add(message);
+
+            FileWriter fileWriter = new FileWriter(botChannel);
+            fileWriter.write(H_GSON.toJson(allMessages));
+            fileWriter.close();
+            log.info("Message added");
+        } catch (Exception e) {
+            log.info(e.getMessage(), e);
+        }
 
     }
 
     public static void editMessagesFromDbBotChannel(Message message) {
+        try {
+            ArrayList<Message> allMessages = getMessagesFromDbBotChannel(0);
 
+            for (int i = 0; i < allMessages.size(); i++) {
+                if (allMessages.get(i).getMessageId() == message.getMessageId()) {
+                    allMessages.set(i, message);
+                    break;
+                }
+            }
+
+            FileWriter fileWriter = new FileWriter(botChannel);
+            fileWriter.write(H_GSON.toJson(allMessages));
+            fileWriter.close();
+            log.info("Message was edited");
+
+        } catch (Exception e) {
+            log.info(e.getMessage(), e);
+        }
     }
 
     public static void removeMessagesFromDbBotChannel(int messageId) {
+        try {
+            ArrayList<Message> allMessages = getMessagesFromDbBotChannel(0);
+
+            for (int m = 0; m < allMessages.size(); m++) {
+                if (allMessages.get(m).getMessageId() == messageId) {
+                    allMessages.remove(m);
+                }
+            }
+
+            FileWriter fileWriter = new FileWriter(botChannel);
+            fileWriter.write(H_GSON.toJson(allMessages));
+            fileWriter.close();
+            log.info("Message was removed from database");
+        } catch (Exception e) {
+            log.info(e.getMessage(), e);
+        }
 
     }
 
