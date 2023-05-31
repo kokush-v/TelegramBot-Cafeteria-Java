@@ -6,7 +6,7 @@ public class BotConfig {
 
   final String botName = "uzhnu_food_bot";
 
-  final String botToken = "5756713867:AAG5gXnXP4abTbpdmm8m55s_1HgkwRmzJ7o";
+  final String botToken = "5756713867:AAGu8Sm-ZdUdr3gn3ymaCOoC6eQL_vqIn6w";
 
   public String getBotName() {
     return this.botName;
