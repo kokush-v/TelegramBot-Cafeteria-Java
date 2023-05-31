@@ -1,6 +1,5 @@
 package uzhnu.bot.service;
 
-import java.io.Console;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -25,7 +24,6 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKe
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
-import io.netty.util.concurrent.CompleteFuture;
 import uzhnu.bot.configuration.BotConfig;
 import uzhnu.bot.methods.db;
 import uzhnu.bot.myclasses.Order;
@@ -67,6 +65,7 @@ public class TelegramBot extends TelegramLongPollingBot {
       Message messageUpdate = update.getMessage();
       String messageTextUpdate = messageUpdate.getText();
       Long userId = update.getMessage().getFrom().getId();
+      UserSession userSession = db.getUserSessionFromDb(userId).get(0);
 
       addHistoryMessage(messageUpdate);
 
@@ -87,44 +86,48 @@ public class TelegramBot extends TelegramLongPollingBot {
             if (db.getUserSessionFromDb(userId) == null)
               db.addUserSessionToDb(userId);
 
-            if (db.getUsersFromDb(userId) == null) {
-              var messageNew = sendMessage(chatId, "Чи бажаєте провести реєстрацію? 😊", null);
+            db.getUsersFromDb(userId).thenAccept(res -> {
+              if (res.isEmpty()) {
+                var messageNew = sendMessage(chatId, "Чи бажаєте провести реєстрацію? 😊", null);
 
-              ArrayList<ReplyButton> replyButtons = new ArrayList<ReplyButton>(
-                  List.of(
-                      new ReplyButton("Так", "REG"),
-                      new ReplyButton("Пізніше", "NOT_REG")));
-              setReplyButtonsOnMessage(replyButtons, chatId, messageNew.getMessageId(),
-                  "Чи бажаєте провести реєстрацію? 😊");
-            } else {
-              showProfile(chatId, update, 0, userId);
-              var s = db.getUserSessionFromDb(userId).get(0);
-              if (s.getRegisterStep() != 4) {
-                s.setRegisterStep(4);
-                db.editUserSessionFromDb(s);
+                ArrayList<ReplyButton> replyButtons = new ArrayList<ReplyButton>(
+                    List.of(
+                        new ReplyButton("Так", "REG"),
+                        new ReplyButton("Пізніше", "NOT_REG")));
+                setReplyButtonsOnMessage(replyButtons, chatId, messageNew.getMessageId(),
+                    "Чи бажаєте провести реєстрацію? 😊");
+              } else {
+                showProfile(chatId, update, 0, userId);
+                var s = db.getUserSessionFromDb(userId).get(0);
+                if (s.getRegisterStep() != 4) {
+                  s.setRegisterStep(4);
+                  db.editUserSessionFromDb(s);
+                }
               }
-            }
+            });
 
           }
           case "/register" -> {
-
-            userReg(chatId, userId, messageUpdate.getMessageId());
+            userReg(chatId, userId, messageUpdate.getMessageId(), userSession);
           }
 
           case "/profile" -> {
             showProfile(chatId, update, 0, userId);
           }
           case "/menu" -> {
-            if (db.getUsersFromDb(userId) != null)
-              showMenu(chatId, userId);
-            else {
-              var m = sendMessage(chatId, "❗", null);
+            db.getUsersFromDb(userId).thenAccept(res -> {
+              if (!res.isEmpty()) {
+                showMenu(chatId, userId);
+              } else {
+                var m = sendMessage(chatId, "❗", null);
 
-              ArrayList<ReplyButton> replyButtons = new ArrayList<ReplyButton>(
-                  Arrays.asList(new ReplyButton("Реєстрація", "REG")));
+                ArrayList<ReplyButton> replyButtons = new ArrayList<ReplyButton>(
+                    Arrays.asList(new ReplyButton("Реєстрація", "REG")));
 
-              setReplyButtonsOnMessage(replyButtons, chatId, m.getMessageId(), "❗Будь ласка пройдіть реєстрацію❗");
-            }
+                setReplyButtonsOnMessage(replyButtons, chatId, m.getMessageId(), "❗Будь ласка пройдіть реєстрацію❗");
+              }
+            });
+
           }
         }
       } catch (Exception e) {
@@ -142,8 +145,7 @@ public class TelegramBot extends TelegramLongPollingBot {
       switch (callBack) {
         case "REG" -> {
           deleteMessages(chatId, 1, update);
-          userReg(chatId, updUserId, messageId);
-
+          userReg(chatId, updUserId, messageId, userSession);
         }
 
         case "NOT_REG" -> {
@@ -260,7 +262,7 @@ public class TelegramBot extends TelegramLongPollingBot {
         }
         case "RESTART" -> {
           deleteMessages(chatId, 1, update);
-          userReg(chatId, updUserId, messageId);
+          userReg(chatId, updUserId, messageId, userSession);
           userSession.setRegisterStep(1);
           ;
         }
@@ -843,7 +845,7 @@ public class TelegramBot extends TelegramLongPollingBot {
     }
   }
 
-  private void userReg(long chatId, long updUserId, int messageId) {
+  private void userReg(long chatId, long updUserId, int messageId, UserSession userSession) {
 
     db.getUsersFromDb(updUserId).thenAccept(res -> {
       if (!res.isEmpty())
@@ -860,7 +862,12 @@ public class TelegramBot extends TelegramLongPollingBot {
 
           return;
         }
+
       String messageText = "Будь ласка вкажіть своє ім'я 😊";
+
+      if (userSession.getRegisterStep() == 2) {
+        messageText = "Введіть номер телефону 📱\nПриклад: +380xx-xxx-xx-xx";
+      }
 
       var messegeNew = sendMessage(chatId, messageText, null);
 

@@ -28,7 +28,6 @@ public class UserSession {
         db.getShopItemFromDb().thenAccept(resp -> {
             if (resp != null) {
                 for (var e : resp) {
-                    System.out.println(e.getId());
                     selectedItem.add(new ShopMenu(e, 0));
                 }
                 future.complete(this);

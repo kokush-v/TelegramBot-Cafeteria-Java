@@ -1,8 +1,5 @@
 package uzhnu.bot;
 
-import java.util.ArrayList;
-import java.util.concurrent.CompletableFuture;
-
 import org.telegram.telegrambots.meta.TelegramBotsApi;
 import org.telegram.telegrambots.updatesreceivers.DefaultBotSession;
 
