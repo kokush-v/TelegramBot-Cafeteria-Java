@@ -65,7 +65,11 @@ public class TelegramBot extends TelegramLongPollingBot {
       Message messageUpdate = update.getMessage();
       String messageTextUpdate = messageUpdate.getText();
       Long userId = update.getMessage().getFrom().getId();
-      UserSession userSession = db.getUserSessionFromDb(userId).get(0);
+      UserSession userSession = null;
+
+      if (db.getUserSessionFromDb(userId) != null) {
+        userSession = db.getUserSessionFromDb(userId).get(0);
+      }
 
       addHistoryMessage(messageUpdate);
 
