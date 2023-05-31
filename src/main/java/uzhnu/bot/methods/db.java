@@ -30,7 +30,7 @@ public class db {
 
     public static void init() throws Exception {
         FileInputStream serviceAccount = new FileInputStream(
-                "src/main/java/uzhnu/bot/database/tokenFirebase.json");
+                "src/main/java/uzhnu/bot/database/dbConfig.json");
 
         FirebaseOptions options = FirebaseOptions.builder()
                 .setCredentials(GoogleCredentials.fromStream(serviceAccount))
